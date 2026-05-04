@@ -901,8 +901,7 @@ Expected result:
 ```text
 DNS A record created or updated to the environment ingress IP.
 ```
-
-<img width="1520" height="1198" alt="DC01 2026-05-01 12-48" src="https://github.com/user-attachments/assets/eeef09da-6e75-4545-9797-a034d859402c" />
+<img width="1498" height="1192" alt="d7aaab58-c1c6-46b2-beed-e41c09bed902_1498x1192" src="https://github.com/user-attachments/assets/c3ae40f8-ff02-41b9-aa20-fd646dba2a14" />
 
 ---
 
