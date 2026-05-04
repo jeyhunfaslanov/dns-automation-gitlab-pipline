@@ -1,4 +1,4 @@
-# dns-automation-gitlab-pipline
+# dns-automation-gitlab-pipeline
 Building GitLab-Driven DNS Automation for Windows DNS from a Linux Runner Server
 
 > The workflow allows developers to create or update internal Windows DNS records from a manual GitLab pipeline without giving GitLab direct access to the authoritative DNS server.
