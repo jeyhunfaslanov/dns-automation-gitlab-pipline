@@ -1,0 +1,145 @@
+---
+- name: Create or update DNS record via management host using DCOM
+  hosts: mgmt-win
+  gather_facts: false
+  collections:
+    - ansible.windows
+
+  vars:
+    zone_name: "DOMAIN.LOCAL"
+    dns_server_name: "DNSSRV01.domain.local"
+    ttl_seconds: 300
+    ingress_ip_map:
+      dev: "10.0.0.58"
+      pre: "10.0.10.58"
+      prod: "10.0.20.58"
+
+  tasks:
+    - name: Validate required input
+      ansible.builtin.assert:
+        that:
+          - dns_env is defined
+          - dns_service_name is defined
+          - dns_namespace is defined
+          - dns_admin_user is defined
+          - dns_admin_password is defined
+          - dns_env in ingress_ip_map
+          - dns_namespace is match('^[a-z0-9-]+$')
+          - dns_service_name is match('^[a-z0-9-]+$')
+          - dns_namespace is not match('(^-|-$|--)')
+          - dns_service_name is not match('(^-|-$|--)')
+        fail_msg: "Invalid DNS input values. Check DNS_ENV, DNS_SERVICE_NAME, and DNS_NAMESPACE."
+
+    - name: Build computed values
+      ansible.builtin.set_fact:
+        target_ip: "{{ ingress_ip_map[dns_env] }}"
+        record_name: "{{ dns_env }}.{{ dns_service_name }}.{{ dns_namespace }}"
+        fqdn: "{{ dns_env }}.{{ dns_service_name }}.{{ dns_namespace }}.domain.local"
+
+    - name: Show computed values
+      ansible.builtin.debug:
+        msg:
+          - "fqdn={{ fqdn }}"
+          - "record_name={{ record_name }}"
+          - "target_ip={{ target_ip }}"
+          - "dns_server={{ dns_server_name }}"
+          - "zone={{ zone_name }}"
+
+    - name: Create or update DNS A record through explicit DCOM CIM session
+      ansible.windows.win_powershell:
+        script: |
+          $ErrorActionPreference = 'Stop'
+
+          $securePassword = ConvertTo-SecureString '{{ dns_admin_password }}' -AsPlainText -Force
+          $credential = [System.Management.Automation.PSCredential]::new('{{ dns_admin_user }}', $securePassword)
+
+          $sessionOption = New-CimSessionOption -Protocol Dcom
+          $session = $null
+
+          try {
+              $session = New-CimSession `
+                  -ComputerName '{{ dns_server_name }}' `
+                  -Credential $credential `
+                  -SessionOption $sessionOption
+
+              $existing = Get-DnsServerResourceRecord `
+                  -ZoneName '{{ zone_name }}' `
+                  -Name '{{ record_name }}' `
+                  -RRType 'A' `
+                  -CimSession $session `
+                  -ErrorAction SilentlyContinue
+
+              if (-not $existing) {
+                  Add-DnsServerResourceRecordA `
+                      -ZoneName '{{ zone_name }}' `
+                      -Name '{{ record_name }}' `
+                      -IPv4Address '{{ target_ip }}' `
+                      -TimeToLive ([TimeSpan]::FromSeconds({{ ttl_seconds }})) `
+                      -CimSession $session
+
+                  @{
+                      changed = $true
+                      action  = 'created'
+                      fqdn    = '{{ fqdn }}'
+                      ip      = '{{ target_ip }}'
+                  } | ConvertTo-Json -Compress
+                  return
+              }
+
+              if ($existing -is [array] -and $existing.Count -gt 1) {
+                  throw "Multiple A records found for {{ record_name }}. Manual review required."
+              }
+
+              $currentIp = $existing.RecordData.IPv4Address.IPAddressToString
+
+              if ($currentIp -eq '{{ target_ip }}') {
+                  @{
+                      changed = $false
+                      action  = 'unchanged'
+                      fqdn    = '{{ fqdn }}'
+                      ip      = '{{ target_ip }}'
+                  } | ConvertTo-Json -Compress
+                  return
+              }
+
+              $newRecord = $existing.Clone()
+              $newRecord.RecordData.IPv4Address = [System.Net.IPAddress]::Parse('{{ target_ip }}')
+              $newRecord.TimeToLive = [TimeSpan]::FromSeconds({{ ttl_seconds }})
+
+              Set-DnsServerResourceRecord `
+                  -ZoneName '{{ zone_name }}' `
+                  -OldInputObject $existing `
+                  -NewInputObject $newRecord `
+                  -CimSession $session
+
+              @{
+                  changed = $true
+                  action  = 'updated'
+                  fqdn    = '{{ fqdn }}'
+                  old_ip  = $currentIp
+                  new_ip  = '{{ target_ip }}'
+              } | ConvertTo-Json -Compress
+          }
+          finally {
+              if ($session) {
+                  $session | Remove-CimSession
+              }
+          }
+      no_log: true
+      register: dns_result
+
+    - name: Show DNS operation result
+      ansible.builtin.debug:
+        var: dns_result.output
+
+    - name: Verify DNS resolution from management host
+      ansible.windows.win_powershell:
+        script: |
+          Resolve-DnsName -Name '{{ fqdn }}' -Server '{{ dns_server_name }}' -ErrorAction Stop |
+            Select-Object Name, Type, IPAddress |
+            ConvertTo-Json -Compress
+      register: dns_verify
+
+    - name: Show DNS verification result
+      ansible.builtin.debug:
+        var: dns_verify.output
