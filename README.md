@@ -888,6 +888,8 @@ From GitLab UI, run the pipeline with:
 | `service_name` | `test-service` |
 | `namespace` | `test` |
 
+<img width="2688" height="932" alt="New pipeline · Platform… 2026-05-01 12-45" src="https://github.com/user-attachments/assets/fdf95144-9c00-4738-9c13-7e3cb8b7b892" />
+
 Generated record:
 
 ```text
@@ -899,6 +901,8 @@ Expected result:
 ```text
 DNS A record created or updated to the environment ingress IP.
 ```
+
+<img width="1520" height="1198" alt="DC01 2026-05-01 12-48" src="https://github.com/user-attachments/assets/eeef09da-6e75-4545-9797-a034d859402c" />
 
 ---
 
