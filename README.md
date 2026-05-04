@@ -76,30 +76,7 @@ flowchart LR
 
 ### 3.2 Sequence Flow
 
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant GitLab as GitLab Pipeline
-    participant Runner as Linux Runner
-    participant Mgmt as Windows Management Host
-    participant DNS as Windows DNS Server
-
-    Dev->>GitLab: Run pipeline manually
-    Dev->>GitLab: Provide env, service_name, namespace
-    GitLab->>Runner: Start shell executor job
-    Runner->>Mgmt: SSH connection on custom port
-    Mgmt->>DNS: New-CimSession -Protocol Dcom
-    Mgmt->>DNS: Get-DnsServerResourceRecord
-    alt Record does not exist
-        Mgmt->>DNS: Add-DnsServerResourceRecordA
-    else Record exists with different IP
-        Mgmt->>DNS: Set-DnsServerResourceRecord
-    else Record already correct
-        Mgmt->>DNS: No change
-    end
-    Mgmt->>DNS: Resolve-DnsName verification
-    DNS-->>GitLab: Result output
-```
+<img width="1774" height="887" alt="ba28790e-9a7c-4b57-86fd-8e883da5ec5a_1774x887" src="https://github.com/user-attachments/assets/d4ec0a86-826d-4b3c-8ab9-b77e571540ea" />
 
 ---
 
