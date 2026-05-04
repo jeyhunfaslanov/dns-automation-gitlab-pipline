@@ -1,0 +1,67 @@
+spec:
+  inputs:
+    env:
+      type: string
+      options:
+        - dev
+        - pre
+        - prod
+      default: dev
+      description: "Target environment for the DNS record"
+    service_name:
+      type: string
+      regex: '^[a-z0-9-]+$'
+      description: "Service name, for example test-service"
+    namespace:
+      type: string
+      regex: '^[a-z0-9-]+$'
+      description: "Kubernetes namespace, for example test"
+
+---
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: always
+    - when: never
+
+stages:
+  - dns
+
+dns_record_create_or_update:
+  stage: dns
+  tags:
+    - shell
+    - infra
+  before_script:
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -T 5 -p "23456" "MGMT01.domain.local" >> ~/.ssh/known_hosts
+    - chmod 600 ~/.ssh/known_hosts
+  script:
+    - |
+      cleanup() {
+        rm -f .ci-extra-vars.yml
+      }
+      trap cleanup EXIT
+
+      cat > .ci-extra-vars.yml <<EOF
+      ansible_password: |-
+        ${MGMT_SSH_PASSWORD}
+      dns_admin_user: |-
+        ${DNS_ADMIN_USER}
+      dns_admin_password: |-
+        ${DNS_ADMIN_PASSWORD}
+      dns_env: |-
+        $[[ inputs.env ]]
+      dns_service_name: |-
+        $[[ inputs.service_name ]]
+      dns_namespace: |-
+        $[[ inputs.namespace ]]
+      EOF
+
+      ansible-playbook -i inventory.yml dns_record_dcom.yml -e @.ci-extra-vars.yml
